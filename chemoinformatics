@@ -1,0 +1,469 @@
+SRC 001: PYTHON CODE : PubChem PUG-REST API
+
+ # Substructure search: all compounds containing flavone core
+ import requests, pandas as pd
+
+ smarts "c1ccc(-c2cc(O)c3ccccc3o2)cc1"
+ url f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/substructure/smarts/{smarts}/JSON"
+
+ response requests.get(url, params{"MaxRecords": 100})
+ cids response.json()["IdentifierList"]["CID"]
+ print(f"Found {len(cids)} compounds")
+
+ # Retrieve properties for all CIDs
+ cids_str ",".join(map(str, cids[:50]))
+ prop_url (
+   f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cids_str}"
+   "/property/MolecularWeight,XLogP,TPSA,HBondDonorCount,HBondAcceptorCount/CSV"
+ )
+ df pd.read_csv(prop_url)
+ print(df.head())
+
+SRC 002: PYTHON CODE: ChEMBL API — fetch IC50 data
+
+ from chembl_webresource_client.new_client import new_client
+
+ activity new_client.activity
+ # CHEMBL220 EGFR kinase
+ results activity.filter(
+   target_chembl_id"CHEMBL220",
+   standard_type"IC50",
+   pchembl_value__isnullFalse
+ ).only(["molecule_chembl_id", "canonical_smiles", "pchembl_value"])
+
+ df pd.DataFrame(list(results))
+ print(df.head())
+ # pchembl_value -log10(IC50 in M) — higher value more potent
+
+SRC 003: PYTHON + SQLITE3 CODE
+
+ import sqlite3, pandas as pd
+
+ conn sqlite3.connect("molecules.db")
+ cur conn.cursor()
+
+ cur.executescript("""
+ CREATE TABLE IF NOT EXISTS molecules (
+   mol_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+   name   TEXT,
+   smiles  TEXT NOT NULL,
+   inchikey TEXT UNIQUE,
+   formula  TEXT,
+   mol_wt  REAL
+ );
+ CREATE TABLE IF NOT EXISTS properties (
+   prop_id  INTEGER PRIMARY KEY,
+   mol_id  INTEGER REFERENCES molecules(mol_id),
+   logP   REAL,
+   tpsa   REAL,
+   hbd    INTEGER,
+   hba    INTEGER,
+   rot_bonds INTEGER
+ );
+ CREATE TABLE IF NOT EXISTS bioactivity (
+   act_id  INTEGER PRIMARY KEY,
+   mol_id  INTEGER REFERENCES molecules(mol_id),
+   target  TEXT,
+   assay   TEXT,
+   value   REAL,
+   units   TEXT,
+   pchembl  REAL,
+   doi    TEXT
+ );
+ """)
+ conn.commit()
+
+ # Insert a molecule
+ cur.execute("""
+   INSERT OR IGNORE INTO molecules (name, smiles, inchikey, formula, mol_wt)
+   VALUES (?, ?, ?, ?, ?)""",
+   ("Quercetin",
+    "Oc1c(O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12",
+    "REFJWTPEDVJJIY-UHFFFAOYSA-N",
+    "C15H10O7", 302.24))
+ conn.commit()
+
+SRC 004: PYTHON: Statistical analysis
+
+ import sqlite3, pandas as pd, matplotlib.pyplot as plt
+
+ conn sqlite3.connect("molecules.db")
+ df pd.read_sql("""
+   SELECT m.name, p.logP, p.tpsa, p.hbd, p.hba, b.pchembl
+   FROM molecules m
+   JOIN properties p ON m.mol_id p.mol_id
+   JOIN bioactivity b ON m.mol_id b.mol_id
+   WHERE b.pchembl IS NOT NULL
+ """, conn)
+
+ print(df.describe())       # summary statistics
+ print(df.corr(numeric_onlyTrue)) # correlation matrix
+
+ # Property distribution plots
+ fig, axes plt.subplots(1, 3, figsize(12, 4))
+ df["logP"].hist(axaxes[0], bins20, color"#1D9E75")
+ df["tpsa"].hist(axaxes[1], bins20, color"#534AB7")
+ df["pchembl"].hist(axaxes[2], bins20, color"#BA7517")
+ for ax, title in zip(axes, ["LogP", "TPSA", "pChEMBL"]):
+   ax.set_title(title); ax.set_xlabel(title)
+ plt.tight_layout()
+ plt.savefig("property_distributions.png")
+
+SRC 005: PYTHON/RDKIT: SMILES to 2D image and 3D conformer
+
+ from rdkit import Chem
+ from rdkit.Chem import Draw, AllChem
+
+ # Parse SMILES
+ mol Chem.MolFromSmiles("c1ccc(O)cc1") # phenol
+
+ # Generate 2D coordinates and draw
+ AllChem.Compute2DCoords(mol)
+ img Draw.MolToImage(mol, size(300, 300))
+ img.save("phenol_2d.png")
+
+ # Generate 3D conformer (ETKDGv3 algorithm)
+ mol_h Chem.AddHs(mol)
+ AllChem.EmbedMolecule(mol_h, AllChem.ETKDGv3())
+ AllChem.MMFFOptimizeMolecule(mol_h) # energy minimize with MMFF94
+
+ # Save as SDF
+ writer Chem.SDWriter("phenol_3d.sdf")
+ writer.write(mol_h)
+ writer.close()
+
+SRC 006: PYTHON/RDKIT: SDF to MOL2 (via OpenBabel)
+ import subprocess
+
+ # OpenBabel command-line conversion: SDF -> MOL2 with 3D generation
+ subprocess.run([
+   "obabel", "library.sdf",
+   "-O", "library.mol2",
+   "--gen3d",  # generate 3D coordinates if missing
+   "-h"     # add explicit hydrogens
+ ])
+
+ # Install OpenBabel: conda install -c conda-forge openbabel
+
+SRC 007: PYTHON/RDKIT: Morgan fingerprints (ECFP4)
+
+ from rdkit import Chem
+ from rdkit.Chem import AllChem
+ import numpy as np
+
+ smiles_list [
+   "CC(O)Oc1ccccc1C(O)O", # aspirin
+   "c1ccc(O)cc1",       # phenol
+   "OC(O)c1ccccc1",     # benzoic acid
+ ]
+
+ fps []
+ for smi in smiles_list:
+   mol Chem.MolFromSmiles(smi)
+   # radius2 -> ECFP4, nBits2048
+   fp AllChem.GetMorganFingerprintAsBitVect(mol, radius2, nBits2048)
+   fps.append(np.array(fp))
+
+ X np.array(fps) # shape: (3, 2048) — ready for sklearn
+
+SRC 008: PYTHON/RDKIT: Tanimoto similarity
+
+ from rdkit.DataStructs import BulkTanimotoSimilarity
+ from rdkit.Chem import AllChem
+
+ # Convert to RDKit bit vectors
+ bit_fps [AllChem.GetMorganFingerprintAsBitVect(
+   Chem.MolFromSmiles(s), 2, 2048) for s in smiles_list]
+
+ # Similarity of first molecule against all others
+ sims BulkTanimotoSimilarity(bit_fps[0], bit_fps)
+ for smi, tc in zip(smiles_list, sims):
+   print(f"Tc{tc:.3f} {smi}")
+
+SRC 009: PYTHON/PADELPY: Calculate 1875 PaDEL descriptors
+
+ from padelpy import padeldescriptor
+ import pandas as pd
+
+ # Write SMILES to file (one per line: SMILES name)
+ with open("smiles.smi", "w") as f:
+   for i, smi in enumerate(smiles_list):
+     f.write(f"{smi} mol{i}\n")
+
+ # Calculate all 2D descriptors + fingerprints
+ padeldescriptor(
+   mol_dir"smiles.smi",
+   d_file"descriptors.csv",
+   d_2dTrue,      # 2D descriptors (1444)
+   d_3dFalse,     # skip 3D (requires conformers)
+   fingerprintsTrue,  # include fingerprints (+881)
+   removesaltTrue,
+   standardizenitroTrue,
+   threads4
+ )
+
+ df pd.read_csv("descriptors.csv")
+ print(df.shape) # (n_molecules, ~1880)
+
+SRC 010: PYTHON/RDKIT: Property calculation (equivalent to cxcalc)
+
+ from rdkit import Chem
+ from rdkit.Chem import Descriptors, rdMolDescriptors
+
+ mol Chem.MolFromSmiles("CC(O)Oc1ccccc1C(O)O") # aspirin
+
+ logP    Descriptors.MolLogP(mol)      # Wildman-Crippen LogP
+ mw     Descriptors.ExactMolWt(mol)     # exact molecular weight
+ tpsa    rdMolDescriptors.CalcTPSA(mol)    # topological polar surface area
+ hbd    rdMolDescriptors.CalcNumHBD(mol)   # H-bond donors
+ hba    rdMolDescriptors.CalcNumHBA(mol)   # H-bond acceptors
+ rings   rdMolDescriptors.CalcNumRings(mol)
+ rot_bonds rdMolDescriptors.CalcNumRotatableBonds(mol)
+ formula  rdMolDescriptors.CalcMolFormula(mol)
+
+ print(f"Formula{formula} MW{mw:.2f}")
+ print(f"LogP{logP:.2f} TPSA{tpsa:.2f}")
+ print(f"HBD{hbd} HBA{hba} Rings{rings} RotBonds{rot_bonds}")
+
+SRC 011: PYTHON: Classification — active vs inactive
+
+ import pandas as pd
+ import numpy as np
+ from rdkit import Chem
+ from rdkit.Chem import AllChem
+ from sklearn.ensemble import RandomForestClassifier
+ from sklearn.model_selection import train_test_split
+ from sklearn.metrics import roc_auc_score, classification_report, RocCurveDisplay
+ import matplotlib.pyplot as plt
+
+ # Load dataset (columns: smiles, active)
+ df pd.read_csv("egfr_compounds.csv")
+
+ # Generate Morgan fingerprints
+ def smiles_to_fp(smi, radius2, nbits2048):
+   mol Chem.MolFromSmiles(smi)
+   if mol is None:
+     return None
+   fp AllChem.GetMorganFingerprintAsBitVect(mol, radius, nbits)
+   return np.array(fp)
+
+ df["fp"] df["smiles"].apply(smiles_to_fp)
+ df df.dropna(subset["fp"])
+
+ X np.vstack(df["fp"].values)
+ y df["active"].values
+
+ X_train, X_test, y_train, y_test train_test_split(
+   X, y, test_size0.2, random_state42, stratifyy)
+
+ rf RandomForestClassifier(
+   n_estimators200, max_features"sqrt",
+   random_state42, n_jobs-1)
+ rf.fit(X_train, y_train)
+
+ y_proba rf.predict_proba(X_test)[:, 1]
+ auc roc_auc_score(y_test, y_proba)
+ print(f"Test ROC-AUC: {auc:.3f}")
+ print(classification_report(y_test, rf.predict(X_test)))
+
+ # ROC curve plot
+ fig, ax plt.subplots(figsize(5, 4))
+ RocCurveDisplay.from_predictions(y_test, y_proba, axax)
+ ax.set_title(f"ROC Curve (AUC {auc:.3f})")
+ plt.tight_layout()
+ plt.savefig("roc_curve.png")
+
+SRC 012: PYTHON: Regression — predict pIC50
+
+ from sklearn.ensemble import RandomForestRegressor
+ from sklearn.model_selection import train_test_split
+ from sklearn.metrics import r2_score, mean_squared_error
+ from sklearn.preprocessing import StandardScaler
+ from sklearn.feature_selection import VarianceThreshold
+ import matplotlib.pyplot as plt
+
+ # Load PaDEL descriptors
+ X_df pd.read_csv("descriptors.csv").drop("Name", axis1)
+ y pd.read_csv("egfr_activity.csv")["pchembl_value"]
+
+ # Remove near-zero variance features
+ sel VarianceThreshold(threshold0.01)
+ X_sel sel.fit_transform(X_df.fillna(0))
+
+ X_train, X_test, y_train, y_test train_test_split(
+   X_sel, y, test_size0.2, random_state42)
+
+ scaler StandardScaler()
+ X_train_s scaler.fit_transform(X_train)
+ X_test_s  scaler.transform(X_test)
+
+ rf_reg RandomForestRegressor(
+   n_estimators200, random_state42, n_jobs-1)
+ rf_reg.fit(X_train_s, y_train)
+
+ y_pred rf_reg.predict(X_test_s)
+ r2  r2_score(y_test, y_pred)
+ rmse mean_squared_error(y_test, y_pred, squaredFalse)
+ print(f"R2 {r2:.3f}  RMSE {rmse:.3f}")
+
+ # Scatter plot: predicted vs actual
+ plt.figure(figsize(5, 4))
+ plt.scatter(y_test, y_pred, alpha0.6, color"#1D9E75")
+ plt.plot([4, 10], [4, 10], "k--", lw1)
+ plt.xlabel("Experimental pIC50")
+ plt.ylabel("Predicted pIC50")
+ plt.title(f"RF Regression R2{r2:.2f}")
+ plt.tight_layout()
+ plt.savefig("predicted_vs_actual.png")
+
+SRC 013: PYTHON: Feature importance plot
+
+ import numpy as np
+ import matplotlib.pyplot as plt
+
+ importances rf_reg.feature_importances_
+ indices np.argsort(importances)[::-1][:20]
+ feature_names X_df.columns[sel.get_support()][indices]
+
+ plt.figure(figsize(8, 4))
+ plt.bar(range(20), importances[indices], color"#534AB7", alpha0.8)
+ plt.xticks(range(20), feature_names, rotation45, ha"right", fontsize9)
+ plt.ylabel("Importance")
+ plt.title("Top 20 Descriptor Importances")
+ plt.tight_layout()
+ plt.savefig("feature_importance.png")
+
+SRC 014: PYTHON: Hyperparameter tuning with GridSearchCV
+
+ from sklearn.model_selection import GridSearchCV
+
+ param_grid {
+   "n_estimators": [100, 200, 500],
+   "max_depth":  [None, 10, 20],
+   "min_samples_split": [2, 5]
+ }
+
+ grid_search GridSearchCV(
+   RandomForestRegressor(random_state42),
+   param_grid,
+   cv5,
+   scoring"r2",
+   n_jobs-1,
+   verbose1
+ )
+ grid_search.fit(X_train_s, y_train)
+
+ print("Best parameters:", grid_search.best_params_)
+ print(f"Best CV R2: {grid_search.best_score_:.3f}")
+ best_model grid_search.best_estimator_
+
+SRC 015: PYTHON: t-SNE chemical space visualization
+
+ from sklearn.manifold import TSNE
+ import matplotlib.pyplot as plt
+ import numpy as np
+
+ # X Morgan fingerprint matrix, y activity class
+ tsne TSNE(n_components2, random_state42, perplexity30)
+ X_2d tsne.fit_transform(X)
+
+ plt.figure(figsize(7, 5))
+ scatter plt.scatter(X_2d[:, 0], X_2d[:, 1],
+             cy, cmap"RdYlGn", alpha0.7, s30)
+ plt.colorbar(scatter, label"Active (1) / Inactive (0)")
+ plt.title("Chemical Space Map (t-SNE on Morgan FP)")
+ plt.xlabel("t-SNE 1"); plt.ylabel("t-SNE 2")
+ plt.tight_layout()
+ plt.savefig("chemical_space_tsne.png")
+
+Molecular Database SCHEMA
+
+ Table: molecules
+  mol_id    INTEGER PRIMARY KEY AUTOINCREMENT
+  name     TEXT
+  smiles    TEXT   NOT NULL
+  inchikey   TEXT   UNIQUE
+  formula   TEXT
+  mol_wt    REAL
+
+ Table: properties
+  prop_id   INTEGER PRIMARY KEY
+  mol_id    INTEGER FOREIGN KEY -> molecules(mol_id)
+  logP     REAL
+  tpsa     REAL
+  hbd     INTEGER   (H-bond donors)
+  hba     INTEGER   (H-bond acceptors)
+  rot_bonds  INTEGER   (rotatable bonds)
+
+ Table: bioactivity
+  act_id    INTEGER PRIMARY KEY
+  mol_id    INTEGER FOREIGN KEY -> molecules(mol_id)
+  target    TEXT
+  assay    TEXT
+  value    REAL
+  units    TEXT
+  pchembl   REAL
+  doi     TEXT
+
+ Table: synthesis
+  syn_id    INTEGER PRIMARY KEY
+  mol_id    INTEGER FOREIGN KEY -> molecules(mol_id)
+  rxn_smiles  TEXT
+  reagents   TEXT
+  conditions  TEXT
+  yield    REAL
+  ref     TEXT
+
+
+MYSQL DDL
+
+ CREATE DATABASE IF NOT EXISTS chemdb;
+ USE chemdb;
+
+ CREATE TABLE molecules (
+   mol_id  INT AUTO_INCREMENT PRIMARY KEY,
+   name   VARCHAR(255),
+   smiles  TEXT NOT NULL,
+   inchikey VARCHAR(27) UNIQUE,
+   formula  VARCHAR(50),
+   mol_wt  FLOAT,
+   INDEX idx_inchikey (inchikey)
+ );
+
+ CREATE TABLE properties (
+   prop_id  INT AUTO_INCREMENT PRIMARY KEY,
+   mol_id  INT,
+   logP   FLOAT,
+   tpsa   FLOAT,
+   hbd    INT,
+   hba    INT,
+   rot_bonds INT,
+   FOREIGN KEY (mol_id) REFERENCES molecules(mol_id) ON DELETE CASCADE
+ );
+
+ -- Python connector:
+ -- pip install mysql-connector-python
+ --
+ -- import mysql.connector
+ -- conn mysql.connector.connect(
+ --   host"localhost", user"root",
+ --   password"yourpass", database"chemdb")
+
+SQL QUERY: Drug-like filter (Lipinski Rule of Five)
+
+
+ -- Find drug-like molecules active against EGFR with pChEMBL > 7 (IC50 < 100 nM)
+ SELECT m.name, m.smiles, p.logP, p.tpsa, p.hbd, p.hba, b.pchembl
+ FROM  molecules m
+ JOIN  properties p ON m.mol_id p.mol_id
+ JOIN  bioactivity b ON m.mol_id b.mol_id
+ WHERE p.logP  BETWEEN -0.5 AND 5.0  -- Lipinski: LogP < 5
+  AND p.tpsa  < 140          -- good oral absorption
+  AND p.hbd  < 5          -- H-bond donors
+  AND p.hba  < 10          -- H-bond acceptors
+  AND b.target 'EGFR'
+  AND b.pchembl > 7.0         -- IC50 < 100 nM
+ ORDER BY b.pchembl DESC
+ LIMIT 20;
+
+ 
