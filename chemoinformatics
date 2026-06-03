@@ -1,5 +1,6 @@
+#-----------------------------------------------------------------------------------------
 SRC 001: PYTHON CODE : PubChem PUG-REST API
-
+#-----------------------------------------------------------------------------------------
  # Substructure search: all compounds containing flavone core
  import requests, pandas as pd
 
@@ -19,8 +20,10 @@ SRC 001: PYTHON CODE : PubChem PUG-REST API
  df pd.read_csv(prop_url)
  print(df.head())
 
-SRC 002: PYTHON CODE: ChEMBL API — fetch IC50 data
 
+#-----------------------------------------------------------------------------------------
+SRC 002: PYTHON CODE: ChEMBL API — fetch IC50 data
+#-----------------------------------------------------------------------------------------
  from chembl_webresource_client.new_client import new_client
 
  activity new_client.activity
@@ -35,8 +38,10 @@ SRC 002: PYTHON CODE: ChEMBL API — fetch IC50 data
  print(df.head())
  # pchembl_value -log10(IC50 in M) — higher value more potent
 
-SRC 003: PYTHON + SQLITE3 CODE
 
+#-----------------------------------------------------------------------------------------
+SRC 003: PYTHON + SQLITE3 CODE
+#-----------------------------------------------------------------------------------------
  import sqlite3, pandas as pd
 
  conn sqlite3.connect("molecules.db")
@@ -83,7 +88,9 @@ SRC 003: PYTHON + SQLITE3 CODE
     "C15H10O7", 302.24))
  conn.commit()
 
+#-----------------------------------------------------------------------------------------
 SRC 004: PYTHON: Statistical analysis
+#-----------------------------------------------------------------------------------------
 
  import sqlite3, pandas as pd, matplotlib.pyplot as plt
 
@@ -109,7 +116,9 @@ SRC 004: PYTHON: Statistical analysis
  plt.tight_layout()
  plt.savefig("property_distributions.png")
 
+#-----------------------------------------------------------------------------------------
 SRC 005: PYTHON/RDKIT: SMILES to 2D image and 3D conformer
+#-----------------------------------------------------------------------------------------
 
  from rdkit import Chem
  from rdkit.Chem import Draw, AllChem
@@ -132,7 +141,10 @@ SRC 005: PYTHON/RDKIT: SMILES to 2D image and 3D conformer
  writer.write(mol_h)
  writer.close()
 
+#-----------------------------------------------------------------------------------------
 SRC 006: PYTHON/RDKIT: SDF to MOL2 (via OpenBabel)
+#-----------------------------------------------------------------------------------------
+
  import subprocess
 
  # OpenBabel command-line conversion: SDF -> MOL2 with 3D generation
@@ -145,7 +157,9 @@ SRC 006: PYTHON/RDKIT: SDF to MOL2 (via OpenBabel)
 
  # Install OpenBabel: conda install -c conda-forge openbabel
 
+#-----------------------------------------------------------------------------------------
 SRC 007: PYTHON/RDKIT: Morgan fingerprints (ECFP4)
+#-----------------------------------------------------------------------------------------
 
  from rdkit import Chem
  from rdkit.Chem import AllChem
@@ -166,7 +180,10 @@ SRC 007: PYTHON/RDKIT: Morgan fingerprints (ECFP4)
 
  X np.array(fps) # shape: (3, 2048) — ready for sklearn
 
+#-----------------------------------------------------------------------------------------
 SRC 008: PYTHON/RDKIT: Tanimoto similarity
+#-----------------------------------------------------------------------------------------
+
 
  from rdkit.DataStructs import BulkTanimotoSimilarity
  from rdkit.Chem import AllChem
@@ -205,7 +222,9 @@ SRC 009: PYTHON/PADELPY: Calculate 1875 PaDEL descriptors
  df pd.read_csv("descriptors.csv")
  print(df.shape) # (n_molecules, ~1880)
 
+#-----------------------------------------------------------------------------------------
 SRC 010: PYTHON/RDKIT: Property calculation (equivalent to cxcalc)
+#-----------------------------------------------------------------------------------------
 
  from rdkit import Chem
  from rdkit.Chem import Descriptors, rdMolDescriptors
@@ -225,7 +244,9 @@ SRC 010: PYTHON/RDKIT: Property calculation (equivalent to cxcalc)
  print(f"LogP{logP:.2f} TPSA{tpsa:.2f}")
  print(f"HBD{hbd} HBA{hba} Rings{rings} RotBonds{rot_bonds}")
 
+#-----------------------------------------------------------------------------------------
 SRC 011: PYTHON: Classification — active vs inactive
+#-----------------------------------------------------------------------------------------
 
  import pandas as pd
  import numpy as np
@@ -273,7 +294,9 @@ SRC 011: PYTHON: Classification — active vs inactive
  plt.tight_layout()
  plt.savefig("roc_curve.png")
 
+#-----------------------------------------------------------------------------------------
 SRC 012: PYTHON: Regression — predict pIC50
+#-----------------------------------------------------------------------------------------
 
  from sklearn.ensemble import RandomForestRegressor
  from sklearn.model_selection import train_test_split
@@ -316,7 +339,9 @@ SRC 012: PYTHON: Regression — predict pIC50
  plt.tight_layout()
  plt.savefig("predicted_vs_actual.png")
 
+#-----------------------------------------------------------------------------------------
 SRC 013: PYTHON: Feature importance plot
+#-----------------------------------------------------------------------------------------
 
  import numpy as np
  import matplotlib.pyplot as plt
@@ -333,7 +358,9 @@ SRC 013: PYTHON: Feature importance plot
  plt.tight_layout()
  plt.savefig("feature_importance.png")
 
+#-----------------------------------------------------------------------------------------
 SRC 014: PYTHON: Hyperparameter tuning with GridSearchCV
+#-----------------------------------------------------------------------------------------
 
  from sklearn.model_selection import GridSearchCV
 
@@ -357,7 +384,9 @@ SRC 014: PYTHON: Hyperparameter tuning with GridSearchCV
  print(f"Best CV R2: {grid_search.best_score_:.3f}")
  best_model grid_search.best_estimator_
 
+#-----------------------------------------------------------------------------------------
 SRC 015: PYTHON: t-SNE chemical space visualization
+#-----------------------------------------------------------------------------------------
 
  from sklearn.manifold import TSNE
  import matplotlib.pyplot as plt
@@ -376,7 +405,10 @@ SRC 015: PYTHON: t-SNE chemical space visualization
  plt.tight_layout()
  plt.savefig("chemical_space_tsne.png")
 
+
+#-----------------------------------------------------------------------------------------
 Molecular Database SCHEMA
+#-----------------------------------------------------------------------------------------
 
  Table: molecules
   mol_id    INTEGER PRIMARY KEY AUTOINCREMENT
@@ -414,8 +446,9 @@ Molecular Database SCHEMA
   yield    REAL
   ref     TEXT
 
-
+#-----------------------------------------------------------------------------------------
 MYSQL DDL
+#-----------------------------------------------------------------------------------------
 
  CREATE DATABASE IF NOT EXISTS chemdb;
  USE chemdb;
@@ -449,8 +482,9 @@ MYSQL DDL
  --   host"localhost", user"root",
  --   password"yourpass", database"chemdb")
 
+#-----------------------------------------------------------------------------------------
 SQL QUERY: Drug-like filter (Lipinski Rule of Five)
-
+#-----------------------------------------------------------------------------------------
 
  -- Find drug-like molecules active against EGFR with pChEMBL > 7 (IC50 < 100 nM)
  SELECT m.name, m.smiles, p.logP, p.tpsa, p.hbd, p.hba, b.pchembl
