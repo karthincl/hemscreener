@@ -1,3 +1,490 @@
+BEGINNER'S GUIDE TO CHEMINFORMATICS (Dr M. Karthikeyan, CSIR-National Chemical Laboratory, Pune=-411 008, India)
+
+TABLE OF CONTENTS
+
+  1. Chemical Literature Mining
+  2. Database Creation (MySQL & SQLite3)
+  3. Chemical Structure Representation
+  4. Programming Tools & IDEs
+  5. Molecular Descriptors & Fingerprints
+  6. Machine Learning for Chemical Data
+
+•	Chemical Literature mining for a class of chemical structures Chemical Structures, Properties, Chemical Synthesis
+•	Database creation of of class of molecules with Structure, properties using MySQL, SQLite3 and Database query for searching molecules by properties, statistical analysis
+•	Chemical structures representation 2D, 3D in SMILES, SDF, MOL, MOL2 with examples
+•	Using programming languages Java, Python and IDE netbeans, anaconda along with chemoinformatics tools, JChem , Marvin Sketch, Marvin View of chemaxon, RDKit, CDK, PADEL descriptor calculations for Machine learning methods involving classification, regression with examples using python tools pandas, scikitlearn , matplotlib.
+
+ 
+CHEMICAL LITERATURE MINING
+
+OVERVIEW
+
+Chemical literature mining extracts structured data — structures, properties,
+synthesis routes, and bioactivity — from scientific publications and patent
+databases. The goal is to build a curated dataset for a given class of molecules
+(e.g., flavonoids, beta-lactams, benzimidazoles).
+
+MAJOR DATABASES
+
+  PubChem (https://pubchem.ncbi.nlm.nih.gov)
+    - Free NIH database with 100M+ compounds
+    - Bioactivity assay data, structure search
+    - REST API for programmatic access
+
+  ChEMBL (https://www.ebi.ac.uk/chembl)
+    - Drug-like molecules with bioactivity from published literature
+    - Excellent for QSAR (pIC50, Ki, EC50 data)
+    - Python client: chembl-webresource-client
+
+  SciFinder / Reaxys (commercial)
+    - Most complete reaction and synthesis databases
+    - Patent coverage included
+
+  BindingDB (https://www.bindingdb.org)
+    - Binding affinities (Ki, IC50, Kd) for protein-ligand pairs
+
+  PubMed + NLP Tools
+    - Text mining from full-text papers
+    - Tools: ChemDataExtractor, OSCAR4, ChemNLP
+
+  Patent Databases
+    - USPTO, EPO, Google Patents
+
+
+ 
+MINING WORKFLOW (6 Steps)
+
+  Step 1: Define your chemical class
+    Define a core scaffold using IUPAC name, SMARTS, or CAS RN range.
+    Example: "all chalcones with antifungal activity"
+
+  Step 2: Substructure / similarity search
+    Search PubChem or ChEMBL using SMARTS substructure query.
+    Use Tanimoto similarity > 0.6 to 0.8 for analogue retrieval.
+
+  Step 3: Retrieve properties and bioactivity
+    Download MW, LogP, TPSA, HBD, HBA, and assay results via API.
+    Formats: JSON, CSV, or SDF.
+
+  Step 4: Retrieve synthesis routes
+    Collect reaction SMILES (SMIRKS), reagents, conditions, and yields.
+    SciFinder and Reaxys are most complete for synthesis data.
+
+  Step 5: Deduplicate and curate
+    Standardize with RDKit or ChemAxon Standardizer.
+    Remove salts, neutralize charges, deduplicate by InChIKey.
+
+  Step 6: Store in database
+    Insert into MySQL or SQLite3 with structure, properties,
+    bioactivity, and source DOI or patent number.
+
+SECTION 2: DATABASE CREATION
+
+OVERVIEW
+
+Store your mined dataset in a relational database. SQLite3 is recommended for
+beginners (file-based, no server needed). MySQL is suitable for larger,
+production-scale datasets shared across teams.
+
+SECTION 3: CHEMICAL STRUCTURE REPRESENTATION
+
+
+OVERVIEW
+
+Computers represent molecules as text strings or coordinate files.
+Each format serves different purposes.
+
+FORMAT COMPARISON
+
+
+  SMILES (Simplified Molecular Input Line Entry System)
+    - Compact linear text notation
+    - Best for: databases, ML feature input, data transfer
+    - Example: CC(O)Oc1ccccc1C(O)O  (Aspirin)
+    - Tools: RDKit, CDK, OpenBabel, MarvinSketch
+
+  MOL / SDF (MDL Molfile / SD File)
+    - MOL  single molecule with 2D or 3D atom coordinates and bonds
+    - SDF  multiple MOL blocks separated by "$$$$"
+    - Best for: exchanging structure sets, visualization
+    - Tools: RDKit, OpenBabel, MarvinView
+
+  MOL2 (Tripos SYBYL MOL2)
+    - 3D format with explicit atom types, partial charges, bond orders
+    - Best for: molecular docking input (AutoDock, Glide, GOLD)
+    - Tools: OpenBabel, AmberTools, Schrodinger
+
+  InChI / InChIKey
+    - IUPAC standard identifier; InChIKey is a 27-character hash
+    - Best for: unique structure identification in databases
+    - Example InChIKey: BSYNRYMUTXBXSQ-UHFFFAOYSA-N  (Aspirin)
+
+SMILES SYNTAX RULES
+
+  Symbol      Meaning
+
+  C           aliphatic carbon
+  c           aromatic carbon
+  N, O, S     heteroatoms (uppercase  aliphatic)
+  [NH2]       atom in brackets  explicit hydrogen count
+             double bond
+  #           triple bond
+  ()          branch
+  1, 2, ...   ring closure (matching digits)
+  @, @@       stereocenters (R/S configuration)
+  /  \        E/Z double bond geometry
+
+SMILES EXAMPLES
+
+  Molecule              SMILES
+  ---------             ------
+  Benzene               c1ccccc1
+  Ethanol               CCO
+  Aspirin               CC(O)Oc1ccccc1C(O)O
+  Caffeine              Cn1cnc2c1c(O)n(C)c(O)n2C
+  Quercetin (flavonoid) Oc1c(O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12
+  Benzimidazole core    c1ccc2[nH]cnc2c1
+  Penicillin G          [H][C@@]12SC(C)(C)[C@@H](N1C(O)...)...
+  Imatinib (Gleevec)    Cc1ccc(NC(O)c2ccc(CN3CCN(C)CC3)cc2)cc1...
+
+SDF FILE FORMAT EXAMPLE
+
+  Benzene
+       RDKit          2D
+
+    6  6  0  0  0  0  0  0  0  0999 V2000
+     1.2124    0.7000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+     1.2124   -0.7000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+     0.0000   -1.4000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    -1.2124   -0.7000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    -1.2124    0.7000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+     0.0000    1.4000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1  2  2  0
+    2  3  1  0
+    3  4  2  0
+    4  5  1  0
+    5  6  2  0
+    6  1  1  0
+  M  END
+  > <CAS>       71-43-2
+  > <SMILES>    c1ccccc1
+  > <MW>        78.11
+  $$$$
+  (next molecule follows after $$$$)
+
+SECTION 4: PROGRAMMING TOOLS & IDEs
+
+RECOMMENDED STACK
+
+  For Python (recommended for beginners):
+    IDE:          Anaconda / JupyterLab / VS Code
+    Language:     Python 3.11+
+    Libraries:    RDKit, pandas, scikit-learn, matplotlib
+
+  For Java:
+    IDE:          NetBeans (with Maven support)
+    Language:     Java 11+
+    Libraries:    Chemistry Development Kit (CDK), JChem (ChemAxon)
+
+ANACONDA SETUP: cheminformatics environment
+
+  # Create isolated environment
+  conda create -n cheminfo python3.11
+  conda activate cheminfo
+
+  # Core cheminformatics
+  conda install -c conda-forge rdkit
+  pip install chembl-webresource-client
+  pip install padelpy             # PaDEL descriptor calculator
+
+  # Data science stack
+  conda install pandas numpy scikit-learn
+  conda install matplotlib seaborn jupyter
+
+  # Deep learning (optional)
+  pip install torch torchvision
+  pip install deepchem
+
+  # Verification
+  python -c "from rdkit import Chem; print('RDKit OK')"
+CDK IN JAVA (NetBeans + Maven)
+
+  1. Install NetBeans (https://netbeans.apache.org )
+  2. Create a new Maven project: File -> New Project -> Maven -> Java Application
+  3. Add CDK to pom.xml:
+
+     <dependency>
+         <groupId>org.openscience.cdk</groupId>
+         <artifactId>cdk-bundle</artifactId>
+         <version>2.9</version>
+     </dependency>
+
+  4. Basic CDK code example:
+
+     import org.openscience.cdk.smiles.SmilesParser;
+     import org.openscience.cdk.interfaces.IAtomContainer;
+     import org.openscience.cdk.silent.SilentChemObjectBuilder;
+
+     SmilesParser sp  new SmilesParser(
+         SilentChemObjectBuilder.getInstance());
+     IAtomContainer mol  sp.parseSmiles("c1ccc(O)cc1"); // phenol
+     System.out.println("Atoms: " + mol.getAtomCount()); // 6 heavy atoms
+
+CHEMAXON TOOLS
+
+  MarvinSketch
+    - GUI structure editor
+    - Draw molecules, assign stereochemistry
+    - Export to SMILES, InChI, SDF, MOL2
+    - Calculate basic properties (MW, formula, charge)
+    - Free for academic use: https://chemaxon.com/marvin
+    - Shortcut: Ctrl+E  edit structure source (type SMILES directly)
+
+  MarvinView
+    - Batch molecule viewer
+    - Render entire SDF files as 2D grid
+    - Embeddable in Java applications via the Marvin Beans API
+
+  JChem Base
+    - Chemical database engine for MySQL/Oracle
+    - Enables substructure and similarity search inside SQL
+    - Uses the JChem cartridge installed into the database server
+
+  Calculator Plugins (command-line)
+    - cxcalc:      property calculation
+    - standardize: structure normalization
+    - molconvert:  format conversion
+
+CHEMAXON COMMAND-LINE EXAMPLES
+
+  # Calculate LogP, pKa, TPSA for all molecules in an SDF
+  cxcalc logP pKa tpsa -i sdf molecules.sdf -o csv > properties.csv
+
+  # Standardize structures (remove salts, neutralize, aromatize)
+  standardize \
+      -c "removeexplicitH;neutralize;aromatize;removefragment:methodkeeplargest" \
+      input.sdf -f sdf -o standardized.sdf
+
+  # Format conversion: SDF -> SMILES
+  molconvert smiles molecules.sdf -o molecules.smi
+
+  # Format conversion: SMILES -> MOL2 with 3D generation
+  molconvert mol2:H -3 molecules.smi -o molecules.mol2
+
+SECTION 5: MOLECULAR DESCRIPTORS & FINGERPRINTS
+
+OVERVIEW
+
+Descriptors convert molecular structure into numerical vectors for machine
+learning. They encode physicochemical, topological, electronic, and 3D
+geometric information.
+
+WHY DESCRIPTORS?
+
+ML models cannot read SMILES strings directly. Descriptors are the feature
+vectors (rows of numbers) that represent each molecule as input to
+scikit-learn models.
+
+DESCRIPTOR TYPES
+
+  Constitutional descriptors (~40)
+    - MW, atom counts, ring counts, bond counts, formula weight
+    - Tools: RDKit, CDK, PaDEL
+
+  Topological / graph descriptors (~200)
+    - Wiener index, Zagreb index, Balaban J, Randic chi indices
+    - Encode connectivity without 3D geometry
+    - Tools: RDKit, PaDEL, CDK
+
+  Electronic descriptors (~50)
+    - LogP, TPSA, pKa, dipole moment, electronegativity
+    - Tools: ChemAxon cxcalc, RDKit, Mopac (quantum chemical)
+
+  2D Fingerprints (512-2048 bits each)
+    - Morgan/ECFP: circular substructure fingerprints (most popular for ML)
+    - MACCS keys: 166 predefined structural keys
+    - RDKit FP: path-based topological fingerprint
+    - Daylight FP: hashed path fingerprint
+    - Tools: RDKit, CDK, OpenBabel
+
+  3D Descriptors (~500+)
+    - WHIM, GETAWAY, RDF, MORSE codes
+    - Require 3D conformers; encode 3D shape and geometry
+    - Tools: PaDEL-Descriptor, Dragon
+
+  PaDEL-Descriptor (all-in-one)
+    - Calculates 1875 descriptors (all types above)
+    - Free Java tool, also has Python wrapper (padelpy)
+    - Download: http://www.yapcwsoft.com/dd/padeldescriptor/
+
+ECFP / MORGAN FINGERPRINT
+
+ECFP (Extended Connectivity Fingerprint):
+  - radius2 means ECFP4 (4  2*radius)
+  - Each atom is assigned a hash from its local environment
+  - Bit is set if that circular substructure exists in the molecule
+  - nBits2048 is standard; higher  fewer collisions
+
+TANIMOTO SIMILARITY
+
+Tc  |A intersection B| / |A union B|
+
+  Range: 0.0 (completely different) to 1.0 (identical)
+  Threshold guidelines:
+    Tc > 0.85  : structurally very similar (scaffold-hopping rare)
+    Tc > 0.70  : analogue (same pharmacophore likely)
+    Tc > 0.40  : same broad chemical class
+
+SECTION 6: MACHINE LEARNING FOR CHEMICAL DATA
+
+OVERVIEW
+
+With descriptors as features (X) and measured properties as labels (y),
+you can train models to predict activity, toxicity, solubility, and more.
+This is called QSAR: Quantitative Structure-Activity Relationship modeling.
+
+ML PIPELINE (6 Steps)
+
+  Step 1: Dataset preparation
+    - Source: ChEMBL, BindingDB, or your curated database
+    - Required columns: SMILES + measured property (pIC50 or active/inactive)
+    - Clean: remove duplicates by InChIKey, drop salts, handle missing values
+    - Minimum: 50+ molecules for classification; 200+ for reliable regression
+
+  Step 2: Feature calculation
+    - Generate descriptor matrix X (shape: n_molecules x n_features)
+    - Label vector y  pIC50 values (regression) or 0/1 classes (classification)
+    - Rule of thumb: at least 20 molecules per descriptor used in the model
+
+  Step 3: Split and scale
+    - Random split: 80% train, 20% test (stratified for classification)
+    - Scaffold split: better practice — avoids train/test similarity leakage
+    - StandardScaler for continuous descriptors; not needed for binary fingerprints
+
+  Step 4: Feature selection
+    - Remove near-zero variance features (VarianceThreshold, threshold0.01)
+    - Remove highly correlated features (r > 0.9)
+    - Use RandomForest feature importances or SelectKBest
+
+  Step 5: Train and tune
+    - Start with Random Forest (robust, handles correlated features well)
+    - Tune with GridSearchCV using 5-fold cross-validation
+    - Compare: RF, SVM, XGBoost, k-NN, Naive Bayes
+
+  Step 6: Evaluate
+    - Classification metrics: ROC-AUC, Matthews Correlation Coefficient (MCC), F1
+    - Regression metrics: R-squared (R2), RMSE, MAE
+    - Always plot: y_test vs y_pred scatter; confusion matrix; ROC curve
+
+ALGORITHM REFERENCE
+Algorithm	Use case           	Key parameters
+  Random Forest                       	Both	n_estimators, max_depth, max_features
+  SVM (SVC/SVR)                       	Both	C, kernel (rbf/linear), gamma
+  XGBoost                           	Both  	learning_rate, max_depth, n_estimators
+  k-NN                               	Both	n_neighbors, metric (jaccard for FP)
+  Naive Bayes               	Classification	var_smoothing
+  MLP (Neural Net)                   	Both	hidden_layer_sizes, alpha, learning_rate
+  Gradient Boosting                   	Both	n_estimators, learning_rate, max_depth
+
+EVALUATION METRICS REFERENCE
+
+  Classification:
+    ROC-AUC   : area under receiver operating characteristic curve
+                0.5  random, 1.0  perfect. Aim for > 0.80
+    MCC       : Matthews correlation coefficient. Range -1 to 1.
+                Handles imbalanced datasets better than accuracy.
+    F1 score  : harmonic mean of precision and recall
+    Accuracy  : fraction correct (misleading if classes imbalanced)
+
+  Regression:
+    R2        : coefficient of determination. 1.0  perfect fit.
+                Aim for R2 > 0.6 on external test set.
+    RMSE      : root mean squared error (in same units as y)
+    MAE       : mean absolute error (less sensitive to outliers)
+    Q2_ext    : R2 on external test set (most important metric)
+
+IMPORTANT NOTES FOR QSAR
+
+  1. Scaffold splitting
+     Always prefer scaffold-based train/test split over random split.
+     Random split overestimates performance because similar molecules
+     end up in both train and test sets.
+
+     from rdkit.Chem.Scaffolds import MurckoScaffold
+     # Or use: pip install scikit-mol
+
+  2. y-randomisation test
+     Shuffle labels randomly and retrain. If the scrambled model still
+     shows good performance, your model is overfitting or the dataset
+     has problems.
+
+  3. Applicability domain (AD)
+     Only trust predictions for molecules similar to the training set.
+     Use leverage (Williams plot) or k-NN distance to flag out-of-AD
+     molecules.
+
+  4. Minimum dataset size
+     Classification: > 50 per class (better: 200+ per class)
+     Regression: > 200 molecules for reliable models
+
+QUICK REFERENCE: PYTHON PACKAGES
+
+Package	         Install command	         Purpose
+rdkit	conda install -c conda-forge rdkit	 Core cheminformatics
+padelpy	pip install padelpy	 PaDEL descriptors
+chembl-webresource-client	pip install chembl-webresource-client	 ChEMBL API
+pandas	conda install pandas	 Data tables
+numpy	conda install numpy	 Arrays
+scikit-learn	conda install scikit-learn	 ML models
+matplotlib	conda install matplotlib	 Plotting
+seaborn	conda install seaborn	 Statistical plots
+xgboost	pip install xgboost	 Gradient boosting
+deepchem	pip install deepchem	 Deep learning for chem
+openbabel	conda install -c conda-forge openbabel	 Format conversion
+mysql-connector-python	pip install mysql-connector-python	 MySQL from Python
+
+
+QUICK REFERENCE: USEFUL LINKS
+ Resource	URL
+PubChem	https://pubchem.ncbi.nlm.nih.gov
+ChEMBL	https://www.ebi.ac.uk/chembl
+RDKit documentation	https://www.rdkit.org/docs/
+CDK documentation	https://cdk.github.io/cdk/
+ChemAxon (Marvin)	https://chemaxon.com/marvin
+PaDEL-Descriptor	http://www.yapcwsoft.com/dd/padeldescriptor/
+BindingDB	https://www.bindingdb.org
+Anaconda	https://www.anaconda.com
+NetBeans IDE	https://netbeans.apache.org
+OpenBabel 	https://openbabel.org
+Daylight SMILES	 https://www.daylight.com/dayhtml/doc/theory/theory.smiles.html
+
+
+SUGGESTED LEARNING PATH FOR BEGINNERS
+
+Install Anaconda, RDKit, MarvinSketch.
+       Practice drawing structures and exporting SMILES/SDF.
+       Learn SMILES syntax with 20+ common drugs.
+
+Set up SQLite3 database.
+       Mine 100 compounds from PubChem for one chemical class.
+       Store structures and properties; practice SQL queries.
+
+Calculate Morgan fingerprints and PaDEL descriptors.
+       Learn Tanimoto similarity; cluster your 100 compounds.
+       Visualize property distributions with matplotlib.
+
+Build first Random Forest classification model.
+       Evaluate with ROC-AUC and classification report.
+       Try regression on pIC50 data from ChEMBL.
+
+Tune hyperparameters with GridSearchCV.
+       Compare multiple algorithms.
+       Learn scaffold splitting and y-randomisation.
+
+Explore CDK in Java if needed for your project.
+       Try DeepChem for graph neural networks.
+       Read 2-3 published QSAR papers to see best practices.
+
 #-----------------------------------------------------------------------------------------
 SRC 001: PYTHON CODE : PubChem PUG-REST API
 #-----------------------------------------------------------------------------------------
