@@ -1,3 +1,5 @@
+//Practical Chemoinformatics,2014, M.Karthikeyan, Renu Vyas;
+
 package chemoinformatics;
 
 import org.openscience.cdk.silent.SilentChemObjectBuilder;
